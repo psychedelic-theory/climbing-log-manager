@@ -15,8 +15,8 @@ This project MUST be placed inside a folder named "climb-log-manager" inside XAM
 Example: 'C:\xampp\htdocs\climb-log-manager\'
 
 
-## FINAL WEB URL : http://localhost/climb-log-manager
-
+## FINAL WEB URL
+http://localhost/climb-log-manager
 
 ## How to Run the Application
 1. Open the XAMPP control panel
