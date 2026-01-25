@@ -16,10 +16,10 @@ Example: 'C:\xampp\htdocs\climb-log-manager\'
 
 
 ## FINAL WEB URL
-http://localhost/climb-log-manager
+http://localhost/climbing-log-manager
 
 ## How to Run the Application
 1. Open the XAMPP control panel
 2. Start Apache
 3. Open a browser
-4. Navigate to http://localhost/climb-log-manager/
+4. Navigate to http://localhost/climbing-log-manager/
