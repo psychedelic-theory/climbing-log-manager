@@ -23,3 +23,6 @@ http://localhost/climbing-log-manager
 2. Start Apache
 3. Open a browser
 4. Navigate to http://localhost/climbing-log-manager/
+
+## LOOM DEMO RECORDING 
+URL: https://www.loom.com/share/a9f726e336f4433090e1951c4b9cd941
