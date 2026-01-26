@@ -10,7 +10,7 @@
     <header class="topbar">
         <div class="brand">
             <h1>Climb Log Manager</h1>
-            <p class="subtitle">Local-only CRUD + localStorage</p>
+            <p class="subtitle">Local-only CRUD & localStorage</p>
         </div>
 
         <nav class="tabs" aria-label="Views">
@@ -112,7 +112,9 @@
 
                     <label class="field">
                         <span>Grade *</span>
-                        <input id="grade" type="text" placeholder="e.g., 5.10a or V4" required />
+                        <select id="grade" required>
+                            <option value="">Select…</option>
+                        </select>
                         <small class="error" data-err-for="grade"></small>
                     </label>
 

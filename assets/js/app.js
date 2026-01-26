@@ -29,6 +29,66 @@ if (dateInput) {
 }
 
 
+// Grade options (Add/Edit Log)
+const climbTypeEl = document.getElementById("climbType");
+const gradeSystemEl = document.getElementById("gradeSystem");
+const gradeEl = document.getElementById("grade");
+
+// Allowed grade lists per assignment requirements
+const YDS_GRADES = ["5.2","5.3","5.4","5.5","5.6","5.7","5.8","5.9","5.10","5.11","5.12","5.13","5.14","5.15"];
+const V_GRADES = Array.from({ length: 18 }, (_, i) => `V${i}`); // V0..V17
+
+function setGradeOptions({ climbType, gradeSystem, selected = "" }) {
+    if (!gradeEl) return;
+
+    const isBoulder = climbType === "boulder";
+    const list = gradeSystem === "V" ? V_GRADES : YDS_GRADES;
+
+    // Reset options
+    gradeEl.innerHTML = "";
+    const ph = document.createElement("option");
+    ph.value = "";
+    ph.textContent = "Select…";
+    gradeEl.appendChild(ph);
+
+    for (const g of list) {
+        const opt = document.createElement("option");
+        opt.value = g;
+        opt.textContent = g;
+        gradeEl.appendChild(opt);
+    }
+
+    // Keep selected if valid, otherwise clear
+    if (selected && list.includes(selected)) {
+        gradeEl.value = selected;
+    } else {
+        gradeEl.value = "";
+    }
+}
+
+function refreshGradeOptions(keepSelected = false) {
+    const climbType = climbTypeEl ? climbTypeEl.value : "";
+    const gradeSystem = gradeSystemEl ? gradeSystemEl.value : "";
+    const selected = keepSelected && gradeEl ? gradeEl.value : "";
+    if (!climbType || !gradeSystem) {
+        // Still ensure placeholder exists
+        if (gradeEl && gradeEl.options.length === 0) {
+            const ph = document.createElement("option");
+            ph.value = "";
+            ph.textContent = "Select…";
+            gradeEl.appendChild(ph);
+        }
+        return;
+    }
+    setGradeOptions({ climbType, gradeSystem, selected });
+}
+
+// Update grade options when climb type / grade system changes
+if (climbTypeEl) climbTypeEl.addEventListener("change", () => refreshGradeOptions(false));
+if (gradeSystemEl) gradeSystemEl.addEventListener("change", () => refreshGradeOptions(false));
+
+
+
 const statsEls = {
     totalEl: document.getElementById("statTotal"),
     completionEl: document.getElementById("statCompletion"),
@@ -43,6 +103,8 @@ newBtn.addEventListener("click", () => {
     form.reset();
     document.getElementById("logId").value = "";
     formTitle.textContent = "Add Log";
+    refreshGradeOptions(false);
+
     setView("form");
 });
 
@@ -74,7 +136,8 @@ function onEdit(id) {
     document.getElementById("routeName").value = l.routeName;
     document.getElementById("climbType").value = l.climbType;
     document.getElementById("gradeSystem").value = l.gradeSystem;
-    document.getElementById("grade").value = l.grade;
+    // Populate grade options based on climb type/system, then select the grade
+    setGradeOptions({ climbType: l.climbType, gradeSystem: l.gradeSystem, selected: l.grade });
     document.getElementById("progress").value = l.progress;
 
     formTitle.textContent = "Edit Log";
@@ -97,7 +160,8 @@ deleteConfirm.addEventListener("click", () => {
     saveLogs(logs);
     pendingDeleteId = null;
     modalBackdrop.classList.add("hidden");
-    rerender();
+    refreshGradeOptions(false);
+rerender();
 });
 
 form.addEventListener("submit", (e) => {
@@ -165,6 +229,20 @@ function validate(p) {
     }
     if (p.climbType !== "boulder" && p.gradeSystem && p.gradeSystem !== "YDS") {
         err.gradeSystem = "Roped climbs should use YDS.";
+    }
+
+
+    // Grade range rules:
+    // - Roped climbs (top-rope/sport/trad): YDS grades must be between 5.2 and 5.15 (inclusive)
+    // - Bouldering: V grades must be between V0 and V17 (inclusive)
+    if (p.climbType === "boulder") {
+        if (p.gradeSystem === "V" && p.grade && !V_GRADES.includes(p.grade)) {
+            err.grade = "Bouldering grades must be between V0 and V17.";
+        }
+    } else {
+        if (p.gradeSystem === "YDS" && p.grade && !YDS_GRADES.includes(p.grade)) {
+            err.grade = "Roped climb grades must be between 5.2 and 5.15.";
+        }
     }
 
     return err;
