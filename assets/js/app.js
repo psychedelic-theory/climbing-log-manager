@@ -18,6 +18,17 @@ const modalBackdrop = document.getElementById("modalBackdrop");
 const deleteCancel = document.getElementById("deleteCancel");
 const deleteConfirm = document.getElementById("deleteConfirm");
 
+// Prevent selecting future dates in the date picker
+const dateInput = document.getElementById("date");
+if (dateInput) {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    dateInput.max = `${yyyy}-${mm}-${dd}`;
+}
+
+
 const statsEls = {
     totalEl: document.getElementById("statTotal"),
     completionEl: document.getElementById("statCompletion"),
@@ -125,7 +136,21 @@ function readForm() {
 
 function validate(p) {
     const err = {};
-    if (!p.date) err.date = "Date is required.";
+    if (!p.date) {
+        err.date = "Date is required.";
+    } else {
+        // Disallow future dates (today or earlier only)
+        // HTML date input gives YYYY-MM-DD, so string compare works if both are YYYY-MM-DD
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, "0");
+        const dd = String(today.getDate()).padStart(2, "0");
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+
+        if (p.date > todayStr) {
+            err.date = "Date cannot be in the future.";
+        }
+    }
     if (!p.environment) err.environment = "Environment is required.";
     if (!p.location) err.location = "Location is required.";
     if (!p.routeName) err.routeName = "Route name is required.";
