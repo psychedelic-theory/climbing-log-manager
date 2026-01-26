@@ -25,4 +25,4 @@ http://localhost/climbing-log-manager
 4. Navigate to http://localhost/climbing-log-manager/
 
 ## LOOM DEMO RECORDING 
-URL: 
+URL: https://www.loom.com/share/b355e627df6f4988968f9ed648aee723
