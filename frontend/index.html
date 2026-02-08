@@ -10,7 +10,7 @@
     <header class="topbar">
         <div class="brand">
             <h1>Climb Log Manager</h1>
-            <p class="subtitle">Local-only CRUD & localStorage</p>
+            <p class="subtitle">Cloud-hosted CRUD via backend API</p>
         </div>
 
         <nav class="tabs" aria-label="Views">
@@ -46,6 +46,12 @@
                 </thead>
                 <tbody id="logsTbody"></tbody>
             </table>
+        </div>
+
+        <div class="paging">
+            <button id="prevBtn" class="btn small" type="button">Previous</button>
+            <span id="pageIndicator" class="muted">Page 1 of 1</span>
+            <button id="nextBtn" class="btn small" type="button">Next</button>
         </div>
     </section>
 
@@ -173,7 +179,9 @@
         </div>
     </div>
 </div>
-
+    <script>
+        window.API_BASE_URL = "https://YOUR-BACKEND-HOST-HERE";
+    </script>
     <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>

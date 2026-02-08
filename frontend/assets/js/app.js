@@ -1,9 +1,16 @@
-import { ensureSeed, saveLogs } from "./storage.js";
-import { SEED_LOGS } from "./seed.js";
-import { createLog, updateLog, deleteLog, getLogById } from "./data.js";
 import { renderList, renderStats, setView } from "./ui.js";
+import { apiListLogs, apiGetLog, apiCreateLog, apiUpdateLog, apiDeleteLog, apiStats } from "./api.js";
 
-let logs = ensureSeed(SEED_LOGS);
+const PAGE_SIZE = 10;
+
+let pageState = {
+    page: 1,
+    pageSize: PAGE_SIZE,
+    total: 0,
+    items: [],      // only the current page of logs
+    query: ""
+};
+
 let pendingDeleteId = null;
 
 const tbody = document.getElementById("logsTbody");
@@ -17,6 +24,10 @@ const cancelBtn = document.getElementById("cancelBtn");
 const modalBackdrop = document.getElementById("modalBackdrop");
 const deleteCancel = document.getElementById("deleteCancel");
 const deleteConfirm = document.getElementById("deleteConfirm");
+
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const pageIndicator = document.getElementById("pageIndicator");
 
 // Prevent selecting future dates in the date picker
 const dateInput = document.getElementById("date");
@@ -110,23 +121,39 @@ newBtn.addEventListener("click", () => {
 
 cancelBtn.addEventListener("click", () => setView("list"));
 
-searchInput.addEventListener("input", () => rerender());
+searchInput.addEventListener("input", async () => {
+    pageState.page = 1;
+    await rerender();
+});
 
-function rerender() {
+async function rerender() {
     const q = searchInput.value.trim().toLowerCase();
-    const filtered = q
-        ? logs.filter(l =>
-            l.routeName.toLowerCase().includes(q) ||
-            l.location.toLowerCase().includes(q)
-        )
-        : logs;
+    pageState.query = q;
 
-    renderList(tbody, filtered, onEdit, onAskDelete);
-    renderStats(statsEls, logs);
+    // Fetch paged items from backend
+    const list = await apiListLogs({ page: pageState.page, pageSize: pageState.pageSize, q });
+
+    // Example expected backend response:
+    // { items: [...], total: 123, page: 1, pageSize: 10 }
+    pageState.items = list.items;
+    pageState.total = list.total;
+    pageState.page = list.page;
+
+    const totalPages = Math.max(1, Math.ceil(pageState.total / pageState.pageSize));
+    if (pageIndicator) pageIndicator.textContent = `Page ${pageState.page} of ${totalPages}`;
+
+    if (prevBtn) prevBtn.disabled = pageState.page <= 1;
+    if (nextBtn) nextBtn.disabled = pageState.page >= totalPages;
+
+    renderList(tbody, pageState.items, onEdit, onAskDelete);
+
+    // Either compute stats from backend:
+    const stats = await apiStats();
+    renderStats(statsEls, stats);
 }
 
-function onEdit(id) {
-    const l = getLogById(logs, id);
+async function onEdit(id) {
+    const l = await apiGetLog(id);
     if (!l) return;
 
     document.getElementById("logId").value = l.id;
@@ -154,34 +181,51 @@ deleteCancel.addEventListener("click", () => {
     modalBackdrop.classList.add("hidden");
 });
 
-deleteConfirm.addEventListener("click", () => {
+deleteConfirm.addEventListener("click", async () => {
     if (!pendingDeleteId) return;
-    logs = deleteLog(logs, pendingDeleteId);
-    saveLogs(logs);
+
+    await apiDeleteLog(pendingDeleteId);
+
     pendingDeleteId = null;
     modalBackdrop.classList.add("hidden");
-    refreshGradeOptions(false);
-rerender();
+
+    // If you deleted the last item on the last page, step back a page
+    const maxPage = Math.max(1, Math.ceil((pageState.total - 1) / pageState.pageSize));
+    pageState.page = Math.min(pageState.page, maxPage);
+
+    await rerender();
 });
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const payload = readForm();
+
+    // Keep client-side validation (good UX)
     const errors = validate(payload);
     showErrors(errors);
     if (Object.keys(errors).length) return;
 
-    if (payload.id) {
-        logs = updateLog(logs, payload);
-    } else {
-        payload.id = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
-        logs = createLog(logs, payload);
-    }
+    try {
+        if (payload.id) {
+            await apiUpdateLog(payload.id, payload);
+        } else {
+            // Backend should generate ID, or you can send one.
+            // Better: let backend generate it so server is source of truth.
+        await apiCreateLog(payload);
+        }
 
-    saveLogs(logs);
-    setView("list");
-    rerender();
+        setView("list");
+        await rerender();
+    } catch (err) {
+        // Server-side validation errors should be displayed too
+        // Expect err.body.errors = { field: "message" }
+        if (err.body && err.body.errors) {
+            showErrors(err.body.errors);
+            return;
+        }
+        alert(err.message || "Save failed");
+    }
 });
 
 function readForm() {
@@ -255,5 +299,20 @@ function showErrors(errors) {
         if (el) el.textContent = msg;
     }
 }
+
+prevBtn.addEventListener("click", async () => {
+    if (pageState.page > 1) {
+        pageState.page--;
+        await rerender();
+    }
+});
+
+nextBtn.addEventListener("click", async () => {
+    const totalPages = Math.max(1, Math.ceil(pageState.total / pageState.pageSize));
+    if (pageState.page < totalPages) {
+        pageState.page++;
+        await rerender();
+    }
+});
 
 rerender();
