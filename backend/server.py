@@ -156,6 +156,12 @@ def validate_payload(p: Dict[str, Any], is_update: bool = False) -> Dict[str, st
 # ----------------------------
 # Routes
 # ----------------------------
+@app.get("/")
+def home():
+    return jsonify({
+        "message": "Climbing Log API is running",
+        "health": "/api/health"
+    })
 
 @app.get("/api/health")
 def health():
