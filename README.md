@@ -30,6 +30,7 @@ Backend (PythonAnywhere): https://johanz26.pythonanywhere.com/
     - Delete
   - Never stores the dataset locally
   - Dynamically updates UI when backend data changes
+
 **Server (Flask API)**
   - Handles all CRUD routes
     - GET /api/logs
