@@ -46,7 +46,8 @@ Backend (PythonAnywhere): https://johanz26.pythonanywhere.com/
 All application data is stored on the server. This can be found in the backend/data/logs.json in PythonAnywhere. On startup, the server loads the seed.json files if the log file does not exist. All changes update the logs.json dynamically. Refreshing the web application does not reset the data. Data persists across: Browser refreshes, Devices, & Sessions. This web application works in incognito/private windows. 
 
 ## LOOM DEMONSTRATION FOR SOLO PROJECT 2
-LINK: https://www.loom.com/share/967c2da63bd84277a1ed26c4efc10ded 
+Link: https://www.loom.com/share/967c2da63bd84277a1ed26c4efc10ded
+
 ----------------------------------------------------------------------------------------
 
 # Climb Log Manager - Solo Project 1
