@@ -14,6 +14,7 @@ Backend (PythonAnywhere): https://johanz26.pythonanywhere.com/
   - CSS
   - Vanilla Javascript
   - Hosted on (Netlify)
+
 **Backend**
   - Python (Flask)
   - Hosted on (PythonAnywhere)
