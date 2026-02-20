@@ -1,6 +1,5 @@
 // assets/js/api.js
-const API_BASE_URL = (window.API_BASE_URL || "").replace(/\/$/, ""); 
-// or hardcode temporarily: const API_BASE_URL = "https://your-backend-host.com";
+const API_BASE_URL = "https://climbing-log-manager.onrender.com";
 
 async function request(path, options = {}) {
     const res = await fetch(`${API_BASE_URL}${path}`, {
