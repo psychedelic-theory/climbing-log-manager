@@ -275,3 +275,25 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     font-size:0.85rem;
     color:var(--muted);
 }
+
+/* Status pills (Progress) */
+.pill{
+    display:inline-flex;
+    align-items:center;
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:0.85rem;
+    font-weight:600;
+    border:1px solid var(--border);
+    background:rgba(255,255,255,0.03);
+}
+
+.pill.ok{
+    border-color:rgba(46,229,157,0.45);
+    color:var(--ok);
+}
+
+.pill.warn{
+    border-color:rgba(255,204,102,0.45);
+    color:var(--warn);
+}
