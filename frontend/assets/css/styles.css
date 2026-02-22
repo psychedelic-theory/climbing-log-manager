@@ -91,10 +91,13 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     font-weight:600;
 }
 .btn.danger{
-    background:var(--danger);
-    border-color:var(--danger);
-    color:#2a0b0f;
-    font-weight:700;
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #ffffff;
+    font-weight: 700;
+}
+.btn.danger:hover{
+    filter: brightness(1.1);
 }
 
 .table{
