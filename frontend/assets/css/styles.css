@@ -91,13 +91,14 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     font-weight:600;
 }
 .btn.danger{
-    background: var(--danger);
-    border-color: var(--danger);
-    color: #ffffff;
-    font-weight: 700;
+    background: rgba(255,94,108,0.08);   /* soft red shade */
+    border-color: rgba(255,94,108,0.45);
+    color: var(--danger);
+    font-weight: 400; 
 }
 .btn.danger:hover{
-    filter: brightness(1.1);
+    background: rgba(255,94,108,0.15);
+    border-color: rgba(255,94,108,0.65);
 }
 
 .table{
