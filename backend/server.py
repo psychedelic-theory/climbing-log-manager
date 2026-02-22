@@ -23,145 +23,124 @@ SEED_PATH = os.path.join(DATA_DIR, "seed.json")
 PAGE_SIZE_DEFAULT = 10
 PAGE_SIZE_MAX = 50
 
-YDS_GRADES = ["5.2","5.3","5.4","5.5","5.6","5.7","5.8","5.9","5.10","5.11","5.12","5.13","5.14","5.15"]
-V_GRADES = [f"V{i}" for i in range(18)]  # V0..V17
+
+def _parse_csv(arg: str | None) -> List[str]:
+    if not arg:
+        return []
+    return [x.strip() for x in arg.split(",") if x.strip()]
 
 
-# ----------------------------
-# Helpers: load/save/init
-# ----------------------------
+def _yds_key(g: str) -> int:
+    # Expected like "5.10" .. "5.15" or "5.2" etc.
+    try:
+        s = g.strip().lower()
+        if not s.startswith("5."):
+            return -1
+        num = s.split("5.", 1)[1]
+        # ignore suffixes like a/b/c/d if present (not used in this project)
+        num = "".join(ch for ch in num if ch.isdigit())
+        return 500 + int(num)
+    except Exception:
+        return -1
+
+
+def _v_key(g: str) -> int:
+    # Expected like "V0" .. "V17"
+    try:
+        s = g.strip().upper()
+        if not s.startswith("V"):
+            return -1
+        return int(s[1:])
+    except Exception:
+        return -1
+
+
 def ensure_data_dir() -> None:
     os.makedirs(DATA_DIR, exist_ok=True)
 
 
-def read_json_file(path: str, default: Any) -> Any:
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return default
-    except json.JSONDecodeError:
-        # If file is corrupted, fail safe to default (you may prefer raising)
-        return default
-
-
-def write_json_file(path: str, data: Any) -> None:
-    tmp_path = path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(tmp_path, path)
-
-
 def load_logs() -> List[Dict[str, Any]]:
-    """
-    Loads logs from logs.json.
-    If missing, initializes from seed.json (must contain a JSON array of >= 30 objects).
-    """
     ensure_data_dir()
-
-    logs = read_json_file(LOGS_PATH, default=None)
-    if isinstance(logs, list) and len(logs) > 0:
-        return logs
-
-    # Initialize from seed.json if logs.json doesn't exist or is empty
-    seed = read_json_file(SEED_PATH, default=[])
-    if not isinstance(seed, list):
-        seed = []
-
-    # Enforce minimum 30 records requirement on initial boot
-    if len(seed) < 30:
-        # If you want strict behavior:
-        # raise RuntimeError("seed.json must contain at least 30 records")
-        # We'll still write whatever exists, but your assignment requires 30.
-        pass
-
-    write_json_file(LOGS_PATH, seed)
-    return seed
+    if not os.path.exists(LOGS_PATH):
+        # If logs.json doesn't exist, seed it (at least 30 records required later)
+        seed_logs()
+    with open(LOGS_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def save_logs(logs: List[Dict[str, Any]]) -> None:
     ensure_data_dir()
-    write_json_file(LOGS_PATH, logs)
+    with open(LOGS_PATH, "w", encoding="utf-8") as f:
+        json.dump(logs, f, indent=2)
 
 
-def find_log_index(logs: List[Dict[str, Any]], log_id: str) -> int:
-    for i, l in enumerate(logs):
-        if str(l.get("id")) == str(log_id):
-            return i
-    return -1
+def seed_logs() -> None:
+    ensure_data_dir()
+    if os.path.exists(SEED_PATH):
+        with open(SEED_PATH, "r", encoding="utf-8") as f:
+            seed = json.load(f)
+        save_logs(seed)
+        return
+    save_logs([])
 
 
-# ----------------------------
-# Validation (server-side)
-# ----------------------------
-def today_yyyy_mm_dd() -> str:
-    d = Date.today()
-    return f"{d.year:04d}-{d.month:02d}-{d.day:02d}"
+def validate_payload(payload: Dict[str, Any]) -> Dict[str, str]:
+    errors: Dict[str, str] = {}
 
+    required_fields = ["date", "environment", "location", "routeName", "climbType", "gradeSystem", "grade", "progress"]
+    for field in required_fields:
+        if not str(payload.get(field, "")).strip():
+            errors[field] = f"{field} is required."
 
-def validate_payload(p: Dict[str, Any], is_update: bool = False) -> Dict[str, str]:
-    """
-    Match client-side rules from app.js:
-    required fields, no future date, grade system rules, grade ranges.
-    """
-    err: Dict[str, str] = {}
+    # Date not in the future
+    date_str = str(payload.get("date", "")).strip()
+    if date_str:
+        try:
+            y, m, d = map(int, date_str.split("-"))
+            dt = Date(y, m, d)
+            if dt > Date.today():
+                errors["date"] = "Date cannot be in the future."
+        except Exception:
+            errors["date"] = "Date must be YYYY-MM-DD."
 
-    def is_blank(v: Any) -> bool:
-        return v is None or str(v).strip() == ""
+    environment = payload.get("environment")
+    if environment and environment not in ("gym", "outdoor"):
+        errors["environment"] = "Environment must be gym or outdoor."
 
-    # Required fields
-    if is_blank(p.get("date")):
-        err["date"] = "Date is required."
-    else:
-        # Expect YYYY-MM-DD string, compare lexicographically
-        if str(p["date"]) > today_yyyy_mm_dd():
-            err["date"] = "Date cannot be in the future."
+    climb_type = payload.get("climbType")
+    if climb_type and climb_type not in ("top-rope", "sport", "trad", "boulder"):
+        errors["climbType"] = "Invalid climb type."
 
-    if is_blank(p.get("environment")):
-        err["environment"] = "Environment is required."
-    if is_blank(p.get("location")):
-        err["location"] = "Location is required."
-    if is_blank(p.get("routeName")):
-        err["routeName"] = "Route name is required."
-    if is_blank(p.get("climbType")):
-        err["climbType"] = "Climb type is required."
-    if is_blank(p.get("gradeSystem")):
-        err["gradeSystem"] = "Grade system is required."
-    if is_blank(p.get("grade")):
-        err["grade"] = "Grade is required."
-    if is_blank(p.get("progress")):
-        err["progress"] = "Progress is required."
+    progress = payload.get("progress")
+    if progress and progress not in ("complete", "incomplete"):
+        errors["progress"] = "Progress must be complete or incomplete."
 
-    climb_type = str(p.get("climbType") or "")
-    grade_system = str(p.get("gradeSystem") or "")
-    grade = str(p.get("grade") or "")
+    grade_system = payload.get("gradeSystem")
+    grade = str(payload.get("grade", "")).strip()
 
-    # Domain-specific rule: boulders use V scale; roped climbs use YDS
-    if climb_type == "boulder" and grade_system and grade_system != "V":
-        err["gradeSystem"] = "Bouldering should use V-Scale."
-    if climb_type != "boulder" and grade_system and grade_system != "YDS":
-        err["gradeSystem"] = "Roped climbs should use YDS."
-
-    # Grade range rules
+    # Domain rule: boulder uses V, roped uses YDS
     if climb_type == "boulder":
-        if grade_system == "V" and grade and grade not in V_GRADES:
-            err["grade"] = "Bouldering grades must be between V0 and V17."
+        if grade_system and grade_system != "V":
+            errors["gradeSystem"] = "Bouldering should use V-Scale."
+        if grade_system == "V" and grade:
+            if _v_key(grade) < 0 or _v_key(grade) > 17:
+                errors["grade"] = "Bouldering grades must be between V0 and V17."
     else:
-        if grade_system == "YDS" and grade and grade not in YDS_GRADES:
-            err["grade"] = "Roped climb grades must be between 5.2 and 5.15."
+        if grade_system and grade_system != "YDS":
+            errors["gradeSystem"] = "Roped climbs should use YDS."
+        if grade_system == "YDS" and grade:
+            # expected 5.2 .. 5.15 (based on your client list)
+            k = _yds_key(grade)
+            if k < 502 or k > 515:
+                errors["grade"] = "Roped climb grades must be between 5.2 and 5.15."
 
-    return err
+    return errors
 
 
-# ----------------------------
-# Routes
-# ----------------------------
 @app.get("/")
-def home():
-    return jsonify({
-        "message": "Climbing Log API is running",
-        "health": "/api/health"
-    })
+def root():
+    return jsonify({"health": "/api/health", "message": "Climbing Log API is running"})
+
 
 @app.get("/api/health")
 def health():
@@ -177,6 +156,11 @@ def list_logs():
     page_size = int(request.args.get("pageSize", str(PAGE_SIZE_DEFAULT)))
     q = (request.args.get("q") or "").strip().lower()
 
+    envs = _parse_csv(request.args.get("env"))
+    types = _parse_csv(request.args.get("type"))
+    progress = _parse_csv(request.args.get("progress"))
+    sort = (request.args.get("sort") or "date_desc").strip()
+
     if page < 1:
         page = 1
     if page_size < 1:
@@ -184,19 +168,61 @@ def list_logs():
     if page_size > PAGE_SIZE_MAX:
         page_size = PAGE_SIZE_MAX
 
-    filtered = logs
+    filtered: List[Dict[str, Any]] = logs
+
+    # Search
     if q:
         def matches(l: Dict[str, Any]) -> bool:
             rn = str(l.get("routeName", "")).lower()
             loc = str(l.get("location", "")).lower()
             return q in rn or q in loc
+        filtered = [l for l in filtered if matches(l)]
 
-        filtered = [l for l in logs if matches(l)]
+    # Filters
+    if envs:
+        env_set = set(envs)
+        filtered = [l for l in filtered if str(l.get("environment", "")) in env_set]
+
+    if types:
+        type_set = set(types)
+        filtered = [l for l in filtered if str(l.get("climbType", "")) in type_set]
+
+    if progress:
+        prog_set = set(progress)
+        filtered = [l for l in filtered if str(l.get("progress", "")) in prog_set]
 
     total = len(filtered)
 
-    # Sort: newest date first (optional but nice)
-    filtered.sort(key=lambda l: str(l.get("date", "")), reverse=True)
+    def sort_date_desc():
+        filtered.sort(key=lambda l: str(l.get("date", "")), reverse=True)
+
+    if sort == "date_asc":
+        filtered.sort(key=lambda l: str(l.get("date", "")))
+    elif sort == "date_desc":
+        sort_date_desc()
+    elif sort == "location_asc":
+        filtered.sort(key=lambda l: str(l.get("location", "")).lower())
+    elif sort == "location_desc":
+        filtered.sort(key=lambda l: str(l.get("location", "")).lower(), reverse=True)
+    elif sort == "route_asc":
+        filtered.sort(key=lambda l: str(l.get("routeName", "")).lower())
+    elif sort == "route_desc":
+        filtered.sort(key=lambda l: str(l.get("routeName", "")).lower(), reverse=True)
+    elif sort in ("grade_asc", "grade_desc"):
+        systems = {str(l.get("gradeSystem", "")) for l in filtered if l.get("gradeSystem")}
+        # Only allow grade sorting when the filtered result set has ONE grade system
+        if len(systems) == 1:
+            sys = next(iter(systems))
+            if sys == "YDS":
+                filtered.sort(key=lambda l: _yds_key(str(l.get("grade", ""))), reverse=(sort == "grade_desc"))
+            elif sys == "V":
+                filtered.sort(key=lambda l: _v_key(str(l.get("grade", ""))), reverse=(sort == "grade_desc"))
+            else:
+                sort_date_desc()
+        else:
+            sort_date_desc()
+    else:
+        sort_date_desc()
 
     start = (page - 1) * page_size
     end = start + page_size
@@ -213,88 +239,61 @@ def list_logs():
 @app.get("/api/logs/<log_id>")
 def get_log(log_id: str):
     logs = load_logs()
-    idx = find_log_index(logs, log_id)
-    if idx < 0:
-        return jsonify({"message": "Not found"}), 404
-    return jsonify(logs[idx])
+    for l in logs:
+        if l.get("id") == log_id:
+            return jsonify(l)
+    return jsonify({"message": "Not found"}), 404
 
 
 @app.post("/api/logs")
 def create_log():
-    logs = load_logs()
-    payload = request.get_json(silent=True) or {}
-
-    errors = validate_payload(payload, is_update=False)
+    payload = request.get_json(force=True) or {}
+    errors = validate_payload(payload)
     if errors:
-        return jsonify({"message": "Validation failed", "errors": errors}), 400
+        return jsonify({"errors": errors, "message": "Validation failed"}), 400
 
+    logs = load_logs()
     new_id = str(uuid.uuid4())
-    record = {
-        "id": new_id,
-        "date": str(payload.get("date", "")).strip(),
-        "environment": str(payload.get("environment", "")).strip(),
-        "location": str(payload.get("location", "")).strip(),
-        "routeName": str(payload.get("routeName", "")).strip(),
-        "climbType": str(payload.get("climbType", "")).strip(),
-        "gradeSystem": str(payload.get("gradeSystem", "")).strip(),
-        "grade": str(payload.get("grade", "")).strip(),
-        "progress": str(payload.get("progress", "")).strip(),
-    }
-
-    logs.append(record)
+    payload["id"] = new_id
+    logs.append(payload)
     save_logs(logs)
-    return jsonify(record), 201
+    return jsonify(payload), 201
 
 
 @app.put("/api/logs/<log_id>")
 def update_log(log_id: str):
-    logs = load_logs()
-    idx = find_log_index(logs, log_id)
-    if idx < 0:
-        return jsonify({"message": "Not found"}), 404
+    payload = request.get_json(force=True) or {}
+    payload["id"] = log_id
 
-    payload = request.get_json(silent=True) or {}
-
-    errors = validate_payload(payload, is_update=True)
+    errors = validate_payload(payload)
     if errors:
-        return jsonify({"message": "Validation failed", "errors": errors}), 400
+        return jsonify({"errors": errors, "message": "Validation failed"}), 400
 
-    # Keep id stable
-    record = logs[idx]
-    record.update({
-        "date": str(payload.get("date", "")).strip(),
-        "environment": str(payload.get("environment", "")).strip(),
-        "location": str(payload.get("location", "")).strip(),
-        "routeName": str(payload.get("routeName", "")).strip(),
-        "climbType": str(payload.get("climbType", "")).strip(),
-        "gradeSystem": str(payload.get("gradeSystem", "")).strip(),
-        "grade": str(payload.get("grade", "")).strip(),
-        "progress": str(payload.get("progress", "")).strip(),
-    })
-
-    logs[idx] = record
-    save_logs(logs)
-    return jsonify(record)
+    logs = load_logs()
+    for i, l in enumerate(logs):
+        if l.get("id") == log_id:
+            logs[i] = payload
+            save_logs(logs)
+            return jsonify(payload)
+    return jsonify({"message": "Not found"}), 404
 
 
 @app.delete("/api/logs/<log_id>")
 def delete_log(log_id: str):
     logs = load_logs()
-    idx = find_log_index(logs, log_id)
-    if idx < 0:
+    new_logs = [l for l in logs if l.get("id") != log_id]
+    if len(new_logs) == len(logs):
         return jsonify({"message": "Not found"}), 404
-
-    deleted = logs.pop(idx)
-    save_logs(logs)
-    return jsonify({"deleted": True, "id": deleted.get("id")})
+    save_logs(new_logs)
+    return jsonify({"ok": True})
 
 
 @app.get("/api/stats")
 def stats():
     logs = load_logs()
     total = len(logs)
-    complete = sum(1 for l in logs if str(l.get("progress")) == "complete")
-    completion_rate = 0 if total == 0 else round((complete / total) * 100, 2)  # percent 0..100
+    complete = sum(1 for l in logs if l.get("progress") == "complete")
+    pct = int(round((complete / total) * 100)) if total else 0
 
     by_type: Dict[str, int] = {}
     for l in logs:
@@ -303,11 +302,10 @@ def stats():
 
     return jsonify({
         "total": total,
-        "completionRate": completion_rate,
-        "byType": by_type
+        "completionRate": pct,
+        "byType": by_type,
     })
 
 
 if __name__ == "__main__":
-    # Local dev
     app.run(host="0.0.0.0", port=5000, debug=True)

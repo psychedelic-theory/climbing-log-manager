@@ -8,73 +8,140 @@
 </head>
 <body>
     <header class="topbar">
-        <div class="brand">
+        <div>
             <h1>Climb Log Manager</h1>
-            <p class="subtitle">Cloud-hosted CRUD via backend API</p>
+            <p class="muted">Track your climbs. Search, filter, sort, and manage logs.</p>
         </div>
 
-        <nav class="tabs" aria-label="Views">
-            <button class="tab active" data-view="list">List</button>
-            <button class="tab" data-view="form">Add / Edit</button>
+        <nav class="tabs">
+            <button class="tab active" data-view="list">Logs</button>
             <button class="tab" data-view="stats">Stats</button>
         </nav>
     </header>
 
     <main class="container">
-        <section id="view-list" class="view active">
-            <div class="view-header">
-                <h2>All Climbs</h2>
-                <div class="actions">
-                    <input id="searchInput" class="input" placeholder="Search route/location…" />
-                    <button id="newBtn" class="btn primary">+ New Log</button>
+        <!-- List View -->
+        <section id="viewList" class="view">
+            <div class="panel">
+                <div class="view-header">
+                    <h2>Your Logs</h2>
+
+                    <div class="actions">
+                        <div class="search-group">
+                            <input id="searchInput" class="input" placeholder="Search route/location…" />
+
+                            <button id="filterBtn" class="btn icon" type="button" aria-haspopup="dialog" aria-expanded="false" title="Filter">
+                                <svg class="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M3 5h18l-7 8v5l-4 2v-7L3 5z"></path>
+                                </svg>
+                                <span>Filter</span>
+                            </button>
+
+                            <select id="sortSelect" class="select sort" aria-label="Sort">
+                                <option value="date_desc">Date: Newest</option>
+                                <option value="date_asc">Date: Oldest</option>
+                                <option value="grade_asc">Grade: Easy → Hard</option>
+                                <option value="grade_desc">Grade: Hard → Easy</option>
+                                <option value="location_asc">Location: A → Z</option>
+                                <option value="location_desc">Location: Z → A</option>
+                                <option value="route_asc">Route: A → Z</option>
+                                <option value="route_desc">Route: Z → A</option>
+                            </select>
+                        </div>
+
+                        <button id="newBtn" class="btn primary"> + </button>
+                    </div>
+                </div>
+
+                <div id="filterPanel" class="popover hidden" role="dialog" aria-label="Filters">
+                    <div class="popover-header">
+                        <strong>Filters</strong>
+                        <button id="filterClearBtn" class="btn small" type="button">Clear</button>
+                    </div>
+
+                    <div class="popover-section">
+                        <div class="popover-title">Environment</div>
+                        <label class="check"><input type="checkbox" name="filterEnv" value="outdoor" /> Outdoor</label>
+                        <label class="check"><input type="checkbox" name="filterEnv" value="gym" /> Gym</label>
+                    </div>
+
+                    <div class="popover-section">
+                        <div class="popover-title">Type</div>
+                        <label class="check"><input type="checkbox" name="filterType" value="top-rope" /> Top Rope</label>
+                        <label class="check"><input type="checkbox" name="filterType" value="sport" /> Sport / Lead</label>
+                        <label class="check"><input type="checkbox" name="filterType" value="trad" /> Trad</label>
+                        <label class="check"><input type="checkbox" name="filterType" value="boulder" /> Bouldering</label>
+                        <p class="hint">Tip: Grade sorting is only enabled when the selected types result in one grade system (all boulder or all roped).</p>
+                    </div>
+
+                    <div class="popover-section">
+                        <div class="popover-title">Progress</div>
+                        <label class="check"><input type="checkbox" name="filterProgress" value="complete" /> Complete</label>
+                    </div>
+                </div>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Environment</th>
+                            <th>Location</th>
+                            <th>Route</th>
+                            <th>Type</th>
+                            <th>Grade</th>
+                            <th>Progress</th>
+                            <th class="right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTbody"></tbody>
+                </table>
+
+                <div class="pager">
+                    <button id="prevBtn" class="btn">Prev</button>
+                    <span id="pageIndicator" class="muted">Page 1 of 1</span>
+                    <button id="nextBtn" class="btn">Next</button>
                 </div>
             </div>
+        </section>
 
-        <div class="card">
-            <table class="table" aria-label="Climb logs table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Env</th>
-                        <th>Location</th>
-                        <th>Route</th>
-                        <th>Type</th>
-                        <th>Grade</th>
-                        <th>Progress</th>
-                        <th class="right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="logsTbody"></tbody>
-            </table>
-        </div>
+        <!-- Stats View -->
+        <section id="viewStats" class="view hidden">
+            <div class="panel">
+                <h2>Stats</h2>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="muted">Total logs</div>
+                        <div id="statTotal" class="statValue">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="muted">Completion rate</div>
+                        <div id="statCompletion" class="statValue">0%</div>
+                    </div>
+                    <div class="stat">
+                        <div class="muted">By type</div>
+                        <div id="statByType" class="statValue small">—</div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-        <div class="paging">
-            <button id="prevBtn" class="btn small" type="button">Previous</button>
-            <span id="pageIndicator" class="muted">Page 1 of 1</span>
-            <button id="nextBtn" class="btn small" type="button">Next</button>
-        </div>
-    </section>
+        <!-- Form View -->
+        <section id="viewForm" class="view hidden">
+            <div class="panel">
+                <h2 id="formTitle">Add Log</h2>
 
-    <section id="view-form" class="view">
-        <div class="view-header">
-            <h2 id="formTitle">Add Log</h2>
-            <p class="hint">Fields marked * are required.</p>
-        </div>
+                <form id="logForm" class="form">
+                    <input id="logId" type="hidden" />
 
-        <div class="card">
-            <form id="logForm" novalidate>
-                <input type="hidden" id="logId" />
-
-                <div class="grid">
                     <label class="field">
-                        <span>Date *</span>
-                        <input id="date" type="date" required />
+                        Date
+                        <input id="date" class="input" type="date" required />
                         <small class="error" data-err-for="date"></small>
                     </label>
 
                     <label class="field">
-                        <span>Environment *</span>
-                        <select id="environment" required>
+                        Environment
+                        <select id="environment" class="input" required>
                             <option value="">Select…</option>
                             <option value="gym">Gym</option>
                             <option value="outdoor">Outdoor</option>
@@ -83,20 +150,20 @@
                     </label>
 
                     <label class="field">
-                        <span>Location *</span>
-                        <input id="location" type="text" required />
+                        Location
+                        <input id="location" class="input" placeholder="e.g., BlocHaven / Table Rock" required />
                         <small class="error" data-err-for="location"></small>
                     </label>
 
                     <label class="field">
-                        <span>Route Name *</span>
-                        <input id="routeName" type="text" required />
+                        Route Name
+                        <input id="routeName" class="input" placeholder="e.g., The Nose" required />
                         <small class="error" data-err-for="routeName"></small>
                     </label>
 
                     <label class="field">
-                        <span>Climb Type *</span>
-                        <select id="climbType" required>
+                        Type
+                        <select id="climbType" class="input" required>
                             <option value="">Select…</option>
                             <option value="top-rope">Top Rope</option>
                             <option value="sport">Sport / Lead</option>
@@ -107,8 +174,8 @@
                     </label>
 
                     <label class="field">
-                        <span>Grade System *</span>
-                        <select id="gradeSystem" required>
+                        Grade System
+                        <select id="gradeSystem" class="input" required>
                             <option value="">Select…</option>
                             <option value="YDS">YDS (5.x)</option>
                             <option value="V">V-Scale (Vx)</option>
@@ -117,71 +184,48 @@
                     </label>
 
                     <label class="field">
-                        <span>Grade *</span>
-                        <select id="grade" required>
-                            <option value="">Select…</option>
-                        </select>
+                        Grade
+                        <select id="grade" class="input" required></select>
                         <small class="error" data-err-for="grade"></small>
                     </label>
 
                     <label class="field">
-                        <span>Progress *</span>
-                        <select id="progress" required>
+                        Progress
+                        <select id="progress" class="input" required>
                             <option value="">Select…</option>
                             <option value="complete">Complete</option>
                             <option value="incomplete">Incomplete</option>
                         </select>
                         <small class="error" data-err-for="progress"></small>
                     </label>
+
+                    <div class="formActions">
+                        <button type="button" id="cancelBtn" class="btn">Cancel</button>
+                        <button type="submit" class="btn primary">Save</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- Delete Confirmation Modal -->
+        <div id="modalBackdrop" class="modalBackdrop hidden">
+            <div class="modal">
+                <h3>Delete this log?</h3>
+                <p class="muted">This cannot be undone.</p>
+                <div class="modalActions">
+                    <button id="deleteCancel" class="btn">Cancel</button>
+                    <button id="deleteConfirm" class="btn danger">Delete</button>
                 </div>
-
-                <div class="form-actions">
-                    <button type="button" id="cancelBtn" class="btn">Cancel</button>
-                    <button type="submit" class="btn primary">Save</button>
-                </div>
-            </form>
-        </div>
-    </section>
-
-    <section id="view-stats" class="view">
-        <div class="view-header">
-            <h2>Stats</h2>
-            <p class="hint">Auto-updates as your data changes.</p>
-        </div>
-
-        <div class="stats-grid">
-            <div class="card stat">
-                <h3>Total Logs</h3>
-                <p id="statTotal" class="stat-number">0</p>
-            </div>
-
-            <div class="card stat">
-                <h3>Completion Rate</h3>
-                <p id="statCompletion" class="stat-number">0%</p>
-                <p class="muted">Domain-specific statistic</p>
-            </div>
-
-            <div class="card stat">
-                <h3>By Type</h3>
-                <ul id="statByType" class="stat-list"></ul>
             </div>
         </div>
-    </section>
-</main>
+    </main>
 
-<div id="modalBackdrop" class="backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <div class="modal">
-        <h3 id="modalTitle">Delete log?</h3>
-        <p id="modalText" class="muted">This can’t be undone.</p>
-        <div class="modal-actions">
-            <button id="deleteCancel" class="btn">Cancel</button>
-            <button id="deleteConfirm" class="btn danger">Delete</button>
-        </div>
-    </div>
-</div>
     <script>
-        window.API_BASE_URL = "https://johanz26.pythonanywhere.com";
+        // Point this to your backend service URL.
+        // When you later move to Postgres, this does NOT change (still your API base).
+        window.API_BASE_URL = "https://climbing-log-manager.onrender.com";
     </script>
+
     <script type="module" src="assets/js/app.js"></script>
 </body>
 </html>

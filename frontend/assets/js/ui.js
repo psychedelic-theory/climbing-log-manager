@@ -72,9 +72,19 @@ function escapeHtml(s) {
 }
 
 export function setView(viewName) {
-    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-    document.querySelector(`#view-${viewName}`).classList.add("active");
+    // viewName values from buttons: "list" | "stats" | "form"
+    const map = {
+        list: "viewList",
+        stats: "viewStats",
+        form: "viewForm",
+    };
+
+    const showId = map[viewName];
+    if (!showId) return;
+
+    document.querySelectorAll(".view").forEach(v => v.classList.add("hidden"));
+    document.getElementById(showId)?.classList.remove("hidden");
 
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-    document.querySelector(`.tab[data-view="${viewName}"]`).classList.add("active");
+    document.querySelector(`.tab[data-view="${viewName}"]`)?.classList.add("active");
 }
