@@ -72,7 +72,7 @@ function escapeHtml(s) {
 }
 
 export function setView(viewName) {
-    // viewName values from buttons: "list" | "stats" | "form"
+    // viewName values from buttons: "list" | "stats"
     const map = {
         list: "viewList",
         stats: "viewStats",
