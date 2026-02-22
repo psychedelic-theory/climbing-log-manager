@@ -293,3 +293,23 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
 
 .pill.warn { border-color: rgba(255,204,102,0.45); color: var(--warn); 
 }
+
+/* Button polish */
+.btn:hover{
+    border-color: rgba(94,161,255,0.45);
+    box-shadow: 0 0 0 2px rgba(94,161,255,0.10) inset;
+}
+
+.btn:active{
+    transform: translateY(1px);
+}
+
+.btn:focus-visible{
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(94,161,255,0.30);
+    border-color: rgba(94,161,255,0.65);
+}
+
+.table .btn.small{
+    background: rgba(255,255,255,0.02);
+}
