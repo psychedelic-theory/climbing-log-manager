@@ -115,11 +115,41 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
 .table th{ text-align:left; font-size:0.85rem; color:var(--muted); }
 .table td.right, .table th.right{ text-align:right; }
 
+/* Pager (updated for page size control) */
 .pager{
     display:flex;
     justify-content:space-between;
     align-items:center;
     margin-top:12px;
+    gap:12px;
+}
+
+.pager-group{
+    display:flex;
+    align-items:center;
+    gap:10px;
+}
+
+.pager-center{
+    display:flex;
+    justify-content:center;
+    flex:1;
+    text-align:center;
+}
+
+.pager-right{
+    justify-content:flex-end;
+}
+
+.pageSize{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    white-space:nowrap;
+}
+
+.pageSizeSelect{
+    min-width:90px;
 }
 
 .form{
@@ -179,6 +209,14 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
 @media (max-width: 720px){
     .form{ grid-template-columns:1fr; }
     .stats{ grid-template-columns:1fr; }
+
+    .pager{
+        flex-wrap:wrap;
+    }
+    .pager-center{
+        order:3;
+        flex-basis:100%;
+    }
 }
 
 /* Toolbar (Search + Filter + Sort) */

@@ -98,10 +98,29 @@
                     <tbody id="logsTbody"></tbody>
                 </table>
 
+                <!-- Pager Row -->
                 <div class="pager">
-                    <button id="prevBtn" class="btn">Prev</button>
-                    <span id="pageIndicator" class="muted">Page 1 of 1</span>
-                    <button id="nextBtn" class="btn">Next</button>
+                    <div class="pager-group">
+                        <button id="prevBtn" class="btn">Prev</button>
+                    </div>
+
+                    <div class="pager-center">
+                        <span id="pageIndicator" class="muted">Page 1 of 1</span>
+                    </div>
+
+                    <div class="pager-group pager-right">
+                        <label class="pageSize">
+                            <span class="muted">Page size</span>
+                            <select id="pageSizeSelect" class="select pageSizeSelect" aria-label="Page size">
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="20">20</option>
+                                <option value="50">50</option>
+                            </select>
+                        </label>
+
+                        <button id="nextBtn" class="btn">Next</button>
+                    </div>
                 </div>
             </div>
         </section>

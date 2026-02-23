@@ -17,6 +17,9 @@ const DEFAULT_SORT = "date_desc";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_MIMES = new Set(["image/jpeg", "image/png", "image/gif"]);
 
+const PAGE_SIZE_COOKIE = "clm_page_size";
+const PAGE_SIZE_OPTIONS = new Set([5, 10, 20, 50]);
+
 let pageState = {
   page: 1,
   pageSize: PAGE_SIZE,
@@ -43,6 +46,12 @@ const filterBtn = document.getElementById("filterBtn");
 const filterPanel = document.getElementById("filterPanel");
 const filterClearBtn = document.getElementById("filterClearBtn");
 const sortSelect = document.getElementById("sortSelect");
+
+// Pager controls
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
+const pageIndicator = document.getElementById("pageIndicator");
+const pageSizeSelect = document.getElementById("pageSizeSelect");
 
 // Image form controls
 const imageFileEl = document.getElementById("imageFile");
@@ -117,20 +126,46 @@ const modalBackdrop = document.getElementById("modalBackdrop");
 const deleteCancel = document.getElementById("deleteCancel");
 const deleteConfirm = document.getElementById("deleteConfirm");
 
-const prevBtn = document.getElementById("prevBtn");
-const nextBtn = document.getElementById("nextBtn");
-const pageIndicator = document.getElementById("pageIndicator");
-
 const statsEls = {
   totalEl: document.getElementById("statTotal"),
   completionEl: document.getElementById("statCompletion"),
   byTypeEl: document.getElementById("statByType"),
 };
 
+// ---------------------
+// Cookie helpers
+// ---------------------
+function setCookie(name, value) {
+  // Session cookie (no Expires/Max-Age). Refresh normally keeps cookies,
+  // but we intentionally reset to default on load to meet the assignment rule.
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}; path=/; SameSite=Lax`;
+}
+
+function getCookie(name) {
+  const target = `${encodeURIComponent(name)}=`;
+  const parts = document.cookie.split(";").map(s => s.trim());
+  for (const p of parts) {
+    if (p.startsWith(target)) return decodeURIComponent(p.slice(target.length));
+  }
+  return null;
+}
+
+function applyDefaultPageSizeOnLoad() {
+  // Requirement: after refresh, return to default page size.
+  pageState.pageSize = PAGE_SIZE;
+
+  if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
+
+  // Still "stored as a cookie" — we overwrite it to the default on each load.
+  setCookie(PAGE_SIZE_COOKIE, PAGE_SIZE);
+}
+
+// Tabs
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", () => setView(btn.dataset.view));
 });
 
+// New
 newBtn.addEventListener("click", () => {
   form.reset();
   document.getElementById("logId").value = "";
@@ -252,6 +287,30 @@ if (filterClearBtn) {
   });
 }
 
+// ---------------------
+// Page size dropdown
+// ---------------------
+if (pageSizeSelect) {
+  pageSizeSelect.addEventListener("change", async () => {
+    const raw = pageSizeSelect.value;
+    const n = Number(raw);
+
+    if (!Number.isFinite(n) || !PAGE_SIZE_OPTIONS.has(n)) {
+      // safety fallback
+      pageState.pageSize = PAGE_SIZE;
+      pageSizeSelect.value = String(PAGE_SIZE);
+      setCookie(PAGE_SIZE_COOKIE, PAGE_SIZE);
+    } else {
+      pageState.pageSize = n;
+      setCookie(PAGE_SIZE_COOKIE, n);
+    }
+
+    // UX: changing page size should return you to page 1
+    pageState.page = 1;
+    await rerender();
+  });
+}
+
 function setImagePreviewPlaceholder() {
   if (!imagePreviewEl) return;
   imagePreviewEl.innerHTML = placeholderSvg({ title: "No image" });
@@ -368,7 +427,6 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const payload = readForm();
-
   const errors = validate(payload);
 
   // Client-side image validation
@@ -517,4 +575,8 @@ nextBtn.addEventListener("click", async () => {
 
 updateSortSelectAvailability();
 setImagePreviewPlaceholder();
+
+// Requirement: refresh returns to default page size
+applyDefaultPageSizeOnLoad();
+
 rerender();
