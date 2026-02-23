@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import uuid
+import io
+import hashlib
 from datetime import date as Date
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,6 +12,14 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
+
+# Pillow (for resize/compress). Add Pillow to requirements.txt on Render.
+try:
+    from PIL import Image, ImageOps
+except Exception:  # Pillow not installed
+    Image = None  # type: ignore
+    ImageOps = None  # type: ignore
+
 
 app = Flask(__name__)
 CORS(app)
@@ -331,6 +341,51 @@ def _parse_payload_from_request() -> Dict[str, Any]:
     }
 
 
+def _process_image_bytes(data: bytes, mime: str) -> Tuple[bytes, str]:
+    """
+    Resize + compress to reduce payload before storing in Postgres.
+    - JPEG/PNG: resize longest side to <= 800px and compress.
+    - GIF: keep as-is (animation), just return original.
+    """
+    mime = (mime or "").lower().strip()
+
+    # Keep GIF as-is (resizing animated GIFs safely is more work)
+    if mime == "image/gif":
+        return data, mime
+
+    if Image is None:
+        # Pillow isn't available; fall back to storing raw bytes.
+        return data, mime
+
+    try:
+        im = Image.open(io.BytesIO(data))
+
+        # Respect camera orientation
+        if ImageOps is not None:
+            im = ImageOps.exif_transpose(im)
+
+        max_side = 800
+        im.thumbnail((max_side, max_side))
+
+        out = io.BytesIO()
+
+        if mime == "image/jpeg":
+            if im.mode not in ("RGB", "L"):
+                im = im.convert("RGB")
+            im.save(out, format="JPEG", quality=80, optimize=True, progressive=True)
+            return out.getvalue(), "image/jpeg"
+
+        if mime == "image/png":
+            if im.mode not in ("RGBA", "RGB", "P", "LA", "L"):
+                im = im.convert("RGBA")
+            im.save(out, format="PNG", optimize=True)
+            return out.getvalue(), "image/png"
+
+        return data, mime
+    except Exception:
+        return data, mime
+
+
 def _read_and_validate_image_file() -> Tuple[Optional[bytes], Optional[str], Optional[str], Optional[Dict[str, str]]]:
     """
     Return (bytes, mime, filename, errors).
@@ -350,8 +405,13 @@ def _read_and_validate_image_file() -> Tuple[Optional[bytes], Optional[str], Opt
         return None, None, None, {"image": "Invalid image type. Upload a JPG, PNG, or GIF."}
 
     data = file.read()
+
+    # Enforce upload size limit on the ORIGINAL upload
     if len(data) > MAX_IMAGE_BYTES:
         return None, None, None, {"image": "Image is too large. Max size is 5 MB."}
+
+    # Resize/compress (best-effort) to reduce payload before storing
+    data, mime = _process_image_bytes(data, mime)
 
     return data, mime, filename, None
 
@@ -435,7 +495,6 @@ def list_logs():
             rows = cur.fetchall()
 
     items = [to_api_row(r) for r in rows]
-
     return jsonify({"items": items, "total": total, "page": page, "pageSize": page_size})
 
 
@@ -469,7 +528,22 @@ def get_log_image(log_id: str):
     if not row or not row.get("image_data") or not row.get("image_mime"):
         return jsonify({"message": "No image"}), 404
 
-    return Response(row["image_data"], mimetype=row["image_mime"])
+    img_bytes = row["image_data"]
+    img_mime = row["image_mime"]
+
+    # Strong cache key based on bytes (fast + stable)
+    etag = hashlib.sha1(img_bytes).hexdigest()
+    inm = (request.headers.get("If-None-Match") or "").strip()
+    if inm == etag:
+        return Response(status=304, headers={
+            "ETag": etag,
+            "Cache-Control": "public, max-age=604800",  # 7 days
+        })
+
+    resp = Response(img_bytes, mimetype=img_mime)
+    resp.headers["Cache-Control"] = "public, max-age=604800"  # 7 days
+    resp.headers["ETag"] = etag
+    return resp
 
 
 @app.post("/api/logs")

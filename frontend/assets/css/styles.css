@@ -94,7 +94,7 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     background: rgba(255,94,108,0.08);   /* soft red shade */
     border-color: rgba(255,94,108,0.45);
     color: var(--danger);
-    font-weight: 400; 
+    font-weight: 400;
 }
 .btn.danger:hover{
     background: rgba(255,94,108,0.15);
@@ -292,11 +292,8 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     background: rgba(255,255,255,0.03);
 }
 
-.pill.ok   { border-color: rgba(46,229,157,0.45); color: var(--ok); 
-}
-
-.pill.warn { border-color: rgba(255,204,102,0.45); color: var(--warn); 
-}
+.pill.ok   { border-color: rgba(46,229,157,0.45); color: var(--ok); }
+.pill.warn { border-color: rgba(255,204,102,0.45); color: var(--warn); }
 
 /* Button polish */
 .btn:hover{
@@ -329,13 +326,28 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
     display:flex;
     align-items:center;
     justify-content:center;
+
+    /* polish + intentional crop feeling */
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
 }
 
 .thumb-img{
     width:100%;
     height:100%;
-    object-fit:cover;
+    object-fit:cover; /* keep cropped thumbnails */
     display:block;
+
+    transition: transform 180ms ease;
+    will-change: transform;
+}
+
+.thumb:hover{
+    border-color: rgba(94,161,255,0.55);
+    box-shadow: 0 10px 26px rgba(0,0,0,0.25);
+}
+
+.thumb:hover .thumb-img{
+    transform: scale(1.06);
 }
 
 .noimg{
