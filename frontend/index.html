@@ -85,6 +85,7 @@
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Image</th>
                             <th>Environment</th>
                             <th>Location</th>
                             <th>Route</th>
@@ -149,6 +150,22 @@
                         </select>
                         <small class="error" data-err-for="environment"></small>
                     </label>
+
+                    <!-- Image upload (optional) -->
+                    <label class="field">
+                        Image (optional)
+                        <input id="imageFile" class="input" type="file" accept="image/jpeg,image/png,image/gif,.jpg,.jpeg,.png,.gif" />
+                        <small class="hint">JPG / PNG / GIF only. Max 5 MB.</small>
+                        <small class="error" data-err-for="image"></small>
+                    </label>
+
+                    <div class="field">
+                        Preview
+                        <div id="imagePreview" class="imagePreview"></div>
+                        <div class="imageActions">
+                            <button id="removeImageBtn" class="btn small danger hidden" type="button">Remove image</button>
+                        </div>
+                    </div>
 
                     <label class="field">
                         Location
@@ -222,8 +239,6 @@
     </main>
 
     <script>
-        // Point this to your backend service URL.
-        // When you later move to Postgres, this does NOT change (still your API base).
         window.API_BASE_URL = "https://climbing-log-manager.onrender.com";
     </script>
 

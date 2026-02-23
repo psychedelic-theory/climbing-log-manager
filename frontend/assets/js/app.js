@@ -1,8 +1,21 @@
-import { renderList, renderStats, setView } from "./ui.js";
-import { apiListLogs, apiGetLog, apiCreateLog, apiUpdateLog, apiDeleteLog, apiStats } from "./api.js";
+import { renderList, renderStats, setView, placeholderSvg } from "./ui.js";
+import {
+  apiListLogs,
+  apiGetLog,
+  apiCreateLog,
+  apiUpdateLog,
+  apiCreateLogForm,
+  apiUpdateLogForm,
+  apiDeleteLog,
+  apiStats,
+  apiImageUrl
+} from "./api.js";
 
 const PAGE_SIZE = 10;
 const DEFAULT_SORT = "date_desc";
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_MIMES = new Set(["image/jpeg", "image/png", "image/gif"]);
 
 let pageState = {
   page: 1,
@@ -19,6 +32,7 @@ let pageState = {
 };
 
 let pendingDeleteId = null;
+let removeImageFlag = false;
 
 const tbody = document.getElementById("logsTbody");
 const searchInput = document.getElementById("searchInput");
@@ -29,6 +43,11 @@ const filterBtn = document.getElementById("filterBtn");
 const filterPanel = document.getElementById("filterPanel");
 const filterClearBtn = document.getElementById("filterClearBtn");
 const sortSelect = document.getElementById("sortSelect");
+
+// Image form controls
+const imageFileEl = document.getElementById("imageFile");
+const imagePreviewEl = document.getElementById("imagePreview");
+const removeImageBtn = document.getElementById("removeImageBtn");
 
 // Prevent selecting future dates in the date picker
 const dateInput = document.getElementById("date");
@@ -117,6 +136,13 @@ newBtn.addEventListener("click", () => {
   document.getElementById("logId").value = "";
   formTitle.textContent = "Add Log";
   refreshGradeOptions(false);
+
+  // reset image UI
+  removeImageFlag = false;
+  if (imageFileEl) imageFileEl.value = "";
+  if (removeImageBtn) removeImageBtn.classList.add("hidden");
+  setImagePreviewPlaceholder();
+
   setView("form");
 });
 
@@ -226,6 +252,33 @@ if (filterClearBtn) {
   });
 }
 
+function setImagePreviewPlaceholder() {
+  if (!imagePreviewEl) return;
+  imagePreviewEl.innerHTML = placeholderSvg({ title: "No image" });
+}
+
+function setImagePreviewUrl(url) {
+  if (!imagePreviewEl) return;
+  imagePreviewEl.innerHTML = `<img alt="Climb image preview" src="${url}" />`;
+  const img = imagePreviewEl.querySelector("img");
+  if (img) img.addEventListener("error", () => setImagePreviewPlaceholder());
+}
+
+function validateImageClientSide(file) {
+  if (!file) return null;
+  if (!ALLOWED_MIMES.has(file.type)) return "Invalid image type. Upload a JPG, PNG, or GIF.";
+  if (file.size > MAX_IMAGE_BYTES) return "Image is too large. Max size is 5 MB.";
+  return null;
+}
+
+function buildFormData(payload, { file, removeImage } = {}) {
+  const fd = new FormData();
+  for (const [k, v] of Object.entries(payload)) fd.append(k, v);
+  if (file) fd.append("image", file);
+  if (removeImage) fd.append("removeImage", "1");
+  return fd;
+}
+
 async function rerender() {
   readControlsIntoState();
 
@@ -249,7 +302,7 @@ async function rerender() {
   if (prevBtn) prevBtn.disabled = pageState.page <= 1;
   if (nextBtn) nextBtn.disabled = pageState.page >= totalPages;
 
-  renderList(tbody, pageState.items, onEdit, onAskDelete);
+  renderList(tbody, pageState.items, onEdit, onAskDelete, (id) => apiImageUrl(id));
 
   const stats = await apiStats();
   renderStats(statsEls, stats);
@@ -270,6 +323,18 @@ async function onEdit(id) {
   setGradeOptions({ climbType: l.climbType, gradeSystem: l.gradeSystem, selected: l.grade });
 
   document.getElementById("progress").value = l.progress;
+
+  // Image edit UI
+  removeImageFlag = false;
+  if (imageFileEl) imageFileEl.value = "";
+
+  if (l.hasImage) {
+    setImagePreviewUrl(apiImageUrl(l.id));
+    removeImageBtn?.classList.remove("hidden");
+  } else {
+    setImagePreviewPlaceholder();
+    removeImageBtn?.classList.add("hidden");
+  }
 
   formTitle.textContent = "Edit Log";
   setView("form");
@@ -305,12 +370,21 @@ form.addEventListener("submit", async (e) => {
   const payload = readForm();
 
   const errors = validate(payload);
+
+  // Client-side image validation
+  const file = imageFileEl?.files && imageFileEl.files[0] ? imageFileEl.files[0] : null;
+  const imgErr = validateImageClientSide(file);
+  if (imgErr) errors.image = imgErr;
+
   showErrors(errors);
   if (Object.keys(errors).length) return;
 
   try {
-    if (payload.id) await apiUpdateLog(payload.id, payload);
-    else await apiCreateLog(payload);
+    // Use multipart always (so optional image can be included)
+    const fd = buildFormData(payload, { file, removeImage: removeImageFlag });
+
+    if (payload.id) await apiUpdateLogForm(payload.id, fd);
+    else await apiCreateLogForm(fd);
 
     setView("list");
     await rerender();
@@ -385,6 +459,47 @@ function showErrors(errors) {
   }
 }
 
+// Image events
+if (imageFileEl) {
+  imageFileEl.addEventListener("change", () => {
+    // picking a new file cancels any pending remove
+    removeImageFlag = false;
+
+    const file = imageFileEl.files && imageFileEl.files[0] ? imageFileEl.files[0] : null;
+    const err = validateImageClientSide(file);
+    if (err) {
+      showErrors({ image: err });
+      imageFileEl.value = "";
+      setImagePreviewPlaceholder();
+      removeImageBtn?.classList.add("hidden");
+      return;
+    }
+
+    // Clear any previous image error
+    const imgErrEl = document.querySelector('[data-err-for="image"]');
+    if (imgErrEl) imgErrEl.textContent = "";
+
+    if (!file) {
+      setImagePreviewPlaceholder();
+      removeImageBtn?.classList.add("hidden");
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    setImagePreviewUrl(url);
+    removeImageBtn?.classList.add("hidden");
+  });
+}
+
+if (removeImageBtn) {
+  removeImageBtn.addEventListener("click", () => {
+    removeImageFlag = true;
+    if (imageFileEl) imageFileEl.value = "";
+    setImagePreviewPlaceholder();
+    removeImageBtn.classList.add("hidden");
+  });
+}
+
 prevBtn.addEventListener("click", async () => {
   if (pageState.page > 1) {
     pageState.page--;
@@ -401,4 +516,5 @@ nextBtn.addEventListener("click", async () => {
 });
 
 updateSortSelectAvailability();
+setImagePreviewPlaceholder();
 rerender();

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -23,6 +23,12 @@ SEED_PATH = os.path.join(DATA_DIR, "seed.json")
 
 PAGE_SIZE_DEFAULT = 10
 PAGE_SIZE_MAX = 50
+
+# ----------------------------
+# Image upload rules (uploads only)
+# ----------------------------
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
+ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/gif"}
 
 
 # ----------------------------
@@ -83,6 +89,7 @@ def get_conn():
 
 
 def init_db() -> None:
+    # Table might already exist. Keep it stable and add image columns if missing.
     create_sql = """
     CREATE TABLE IF NOT EXISTS climb_logs (
       id TEXT PRIMARY KEY,
@@ -98,9 +105,16 @@ def init_db() -> None:
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     """
+    alter_sql = [
+        "ALTER TABLE climb_logs ADD COLUMN IF NOT EXISTS image_data BYTEA NULL;",
+        "ALTER TABLE climb_logs ADD COLUMN IF NOT EXISTS image_mime TEXT NULL;",
+        "ALTER TABLE climb_logs ADD COLUMN IF NOT EXISTS image_filename TEXT NULL;",
+    ]
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(create_sql)
+            for s in alter_sql:
+                cur.execute(s)
 
 
 def seed_db_if_empty() -> None:
@@ -216,6 +230,7 @@ def to_api_row(db_row: Dict[str, Any]) -> Dict[str, Any]:
         "gradeSystem": db_row["grade_system"],
         "grade": db_row["grade"],
         "progress": db_row["progress"],
+        "hasImage": bool(db_row.get("has_image", False)),
     }
 
 
@@ -285,6 +300,62 @@ def should_allow_grade_sort(where_sql: str, params: List[Any]) -> Optional[str]:
     return None
 
 
+def _parse_payload_from_request() -> Dict[str, Any]:
+    """
+    Support multipart/form-data (for uploads) and JSON (fallback).
+    """
+    ctype = (request.content_type or "").lower()
+    if ctype.startswith("multipart/form-data") or ctype.startswith("application/x-www-form-urlencoded"):
+        f = request.form
+        return {
+            "date": (f.get("date") or "").strip(),
+            "environment": (f.get("environment") or "").strip(),
+            "location": (f.get("location") or "").strip(),
+            "routeName": (f.get("routeName") or "").strip(),
+            "climbType": (f.get("climbType") or "").strip(),
+            "gradeSystem": (f.get("gradeSystem") or "").strip(),
+            "grade": (f.get("grade") or "").strip(),
+            "progress": (f.get("progress") or "").strip(),
+        }
+
+    payload = request.get_json(silent=True) or {}
+    return {
+        "date": str(payload.get("date", "")).strip(),
+        "environment": str(payload.get("environment", "")).strip(),
+        "location": str(payload.get("location", "")).strip(),
+        "routeName": str(payload.get("routeName", "")).strip(),
+        "climbType": str(payload.get("climbType", "")).strip(),
+        "gradeSystem": str(payload.get("gradeSystem", "")).strip(),
+        "grade": str(payload.get("grade", "")).strip(),
+        "progress": str(payload.get("progress", "")).strip(),
+    }
+
+
+def _read_and_validate_image_file() -> Tuple[Optional[bytes], Optional[str], Optional[str], Optional[Dict[str, str]]]:
+    """
+    Return (bytes, mime, filename, errors).
+    If no file provided -> (None, None, None, None)
+    """
+    if "image" not in request.files:
+        return None, None, None, None
+
+    file = request.files.get("image")
+    if not file or not getattr(file, "filename", ""):
+        return None, None, None, None
+
+    mime = (file.mimetype or "").lower().strip()
+    filename = (file.filename or "").strip()
+
+    if mime not in ALLOWED_IMAGE_MIMES:
+        return None, None, None, {"image": "Invalid image type. Upload a JPG, PNG, or GIF."}
+
+    data = file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        return None, None, None, {"image": "Image is too large. Max size is 5 MB."}
+
+    return data, mime, filename, None
+
+
 # ----------------------------
 # Startup: ensure table + seed
 # ----------------------------
@@ -337,7 +408,6 @@ def list_logs():
             total = int(cur.fetchone()["n"])
 
     # Sort logic
-    order_by = "date DESC"
     if sort in ("grade_asc", "grade_desc"):
         sys = should_allow_grade_sort(where_sql, params)
         if sys in ("YDS", "V"):
@@ -350,7 +420,9 @@ def list_logs():
     offset = (page - 1) * page_size
 
     sql = f"""
-    SELECT id, date, environment, location, route_name, climb_type, grade_system, grade, progress
+    SELECT
+      id, date, environment, location, route_name, climb_type, grade_system, grade, progress,
+      (image_mime IS NOT NULL) AS has_image
     FROM climb_logs
     {where_sql}
     ORDER BY {order_by}
@@ -364,18 +436,15 @@ def list_logs():
 
     items = [to_api_row(r) for r in rows]
 
-    return jsonify({
-        "items": items,
-        "total": total,
-        "page": page,
-        "pageSize": page_size
-    })
+    return jsonify({"items": items, "total": total, "page": page, "pageSize": page_size})
 
 
 @app.get("/api/logs/<log_id>")
 def get_log(log_id: str):
     sql = """
-    SELECT id, date, environment, location, route_name, climb_type, grade_system, grade, progress
+    SELECT
+      id, date, environment, location, route_name, climb_type, grade_system, grade, progress,
+      (image_mime IS NOT NULL) AS has_image
     FROM climb_logs
     WHERE id = %s;
     """
@@ -389,10 +458,29 @@ def get_log(log_id: str):
     return jsonify(to_api_row(row))
 
 
+@app.get("/api/logs/<log_id>/image")
+def get_log_image(log_id: str):
+    sql = "SELECT image_data, image_mime FROM climb_logs WHERE id=%s;"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, [log_id])
+            row = cur.fetchone()
+
+    if not row or not row.get("image_data") or not row.get("image_mime"):
+        return jsonify({"message": "No image"}), 404
+
+    return Response(row["image_data"], mimetype=row["image_mime"])
+
+
 @app.post("/api/logs")
 def create_log():
-    payload = request.get_json(force=True) or {}
+    payload = _parse_payload_from_request()
     errors = validate_payload(payload)
+
+    img_bytes, img_mime, img_filename, img_err = _read_and_validate_image_file()
+    if img_err:
+        errors.update(img_err)
+
     if errors:
         return jsonify({"errors": errors, "message": "Validation failed"}), 400
 
@@ -410,13 +498,17 @@ def create_log():
 
     insert_sql = """
     INSERT INTO climb_logs
-      (id, date, environment, location, route_name, climb_type, grade_system, grade, grade_key, progress)
+      (id, date, environment, location, route_name, climb_type, grade_system, grade, grade_key, progress,
+       image_data, image_mime, image_filename)
     VALUES
-      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+      (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
     """
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(insert_sql, [new_id, date_str, env, loc, route, ctype, gsys, grade, gk, prog])
+            cur.execute(
+                insert_sql,
+                [new_id, date_str, env, loc, route, ctype, gsys, grade, gk, prog, img_bytes, img_mime, img_filename],
+            )
 
     return jsonify({
         "id": new_id,
@@ -427,16 +519,29 @@ def create_log():
         "climbType": ctype,
         "gradeSystem": gsys,
         "grade": grade,
-        "progress": prog
+        "progress": prog,
+        "hasImage": bool(img_mime),
     }), 201
 
 
 @app.put("/api/logs/<log_id>")
 def update_log(log_id: str):
-    payload = request.get_json(force=True) or {}
+    payload = _parse_payload_from_request()
     payload["id"] = log_id
 
     errors = validate_payload(payload)
+
+    # Remove image flag (edit behavior)
+    remove_image = False
+    if request.form:
+        val = (request.form.get("removeImage") or "").strip().lower()
+        if val in ("1", "true", "yes", "on"):
+            remove_image = True
+
+    img_bytes, img_mime, img_filename, img_err = _read_and_validate_image_file()
+    if img_err:
+        errors.update(img_err)
+
     if errors:
         return jsonify({"errors": errors, "message": "Validation failed"}), 400
 
@@ -451,17 +556,33 @@ def update_log(log_id: str):
 
     gk = _grade_key(gsys, grade)
 
-    sql = """
+    img_set_sql = ""
+    img_params: List[Any] = []
+    if remove_image:
+        img_set_sql = ", image_data=NULL, image_mime=NULL, image_filename=NULL"
+    elif img_mime and img_bytes is not None:
+        img_set_sql = ", image_data=%s, image_mime=%s, image_filename=%s"
+        img_params.extend([img_bytes, img_mime, img_filename])
+
+    sql = f"""
     UPDATE climb_logs
     SET date=%s, environment=%s, location=%s, route_name=%s,
         climb_type=%s, grade_system=%s, grade=%s, grade_key=%s, progress=%s
+        {img_set_sql}
     WHERE id=%s;
     """
+
+    base_params: List[Any] = [date_str, env, loc, route, ctype, gsys, grade, gk, prog]
+    params = base_params + img_params + [log_id]
+
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, [date_str, env, loc, route, ctype, gsys, grade, gk, prog, log_id])
+            cur.execute(sql, params)
             if cur.rowcount == 0:
                 return jsonify({"message": "Not found"}), 404
+
+            cur.execute("SELECT (image_mime IS NOT NULL) AS has_image FROM climb_logs WHERE id=%s;", [log_id])
+            has_image = bool(cur.fetchone()["has_image"])
 
     return jsonify({
         "id": log_id,
@@ -472,7 +593,8 @@ def update_log(log_id: str):
         "climbType": ctype,
         "gradeSystem": gsys,
         "grade": grade,
-        "progress": prog
+        "progress": prog,
+        "hasImage": has_image,
     })
 
 
@@ -502,11 +624,7 @@ def stats():
     pct = int(round((complete / total) * 100)) if total else 0
     by_type = {r["climb_type"]: int(r["n"]) for r in by_type_rows}
 
-    return jsonify({
-        "total": total,
-        "completionRate": pct,
-        "byType": by_type,
-    })
+    return jsonify({"total": total, "completionRate": pct, "byType": by_type})
 
 
 if __name__ == "__main__":

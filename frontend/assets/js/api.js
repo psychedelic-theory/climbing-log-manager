@@ -4,9 +4,16 @@
 const API_BASE_URL = (window.API_BASE_URL || "https://climbing-log-manager.onrender.com").replace(/\/$/, "");
 
 async function request(path, options = {}) {
+  const isFormData = (typeof FormData !== "undefined") && options.body instanceof FormData;
+
+  // Only set JSON content-type if NOT sending FormData.
+  const headers = isFormData
+    ? { ...(options.headers || {}) }
+    : { "Content-Type": "application/json", ...(options.headers || {}) };
+
   const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
+    headers,
   });
 
   const contentType = res.headers.get("content-type") || "";
@@ -40,11 +47,22 @@ export async function apiGetLog(id) {
 }
 
 export async function apiCreateLog(payload) {
+  // JSON fallback (still supported)
   return request(`/api/logs`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function apiUpdateLog(id, payload) {
+  // JSON fallback (still supported)
   return request(`/api/logs/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) });
+}
+
+// Multipart (preferred for image upload)
+export async function apiCreateLogForm(formData) {
+  return request(`/api/logs`, { method: "POST", body: formData });
+}
+
+export async function apiUpdateLogForm(id, formData) {
+  return request(`/api/logs/${encodeURIComponent(id)}`, { method: "PUT", body: formData });
 }
 
 export async function apiDeleteLog(id) {
@@ -53,4 +71,8 @@ export async function apiDeleteLog(id) {
 
 export async function apiStats() {
   return request(`/api/stats`);
+}
+
+export function apiImageUrl(id) {
+  return `${API_BASE_URL}/api/logs/${encodeURIComponent(id)}/image`;
 }
