@@ -320,8 +320,8 @@ h2{ margin:0 0 10px 0; font-size:1.15rem; }
 
 /* ---------- Images (thumbnail + preview) ---------- */
 .thumb{
-    width:56px;
-    height:56px;
+    width:72px;
+    height:72px;
     border-radius:14px;
     overflow:hidden;
     border:1px solid var(--border);
