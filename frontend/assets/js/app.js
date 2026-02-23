@@ -129,6 +129,7 @@ const deleteConfirm = document.getElementById("deleteConfirm");
 const statsEls = {
   totalEl: document.getElementById("statTotal"),
   completionEl: document.getElementById("statCompletion"),
+  pageSizeEl: document.getElementById("statPageSize"),
   byTypeEl: document.getElementById("statByType"),
 };
 
@@ -136,8 +137,6 @@ const statsEls = {
 // Cookie helpers
 // ---------------------
 function setCookie(name, value) {
-  // Session cookie (no Expires/Max-Age). Refresh normally keeps cookies,
-  // but we intentionally reset to default on load to meet the assignment rule.
   document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(String(value))}; path=/; SameSite=Lax`;
 }
 
@@ -156,7 +155,7 @@ function applyDefaultPageSizeOnLoad() {
 
   if (pageSizeSelect) pageSizeSelect.value = String(PAGE_SIZE);
 
-  // Still "stored as a cookie" — we overwrite it to the default on each load.
+  // Still "stored as a cookie" — overwrite it to the default on each load.
   setCookie(PAGE_SIZE_COOKIE, PAGE_SIZE);
 }
 
@@ -296,7 +295,6 @@ if (pageSizeSelect) {
     const n = Number(raw);
 
     if (!Number.isFinite(n) || !PAGE_SIZE_OPTIONS.has(n)) {
-      // safety fallback
       pageState.pageSize = PAGE_SIZE;
       pageSizeSelect.value = String(PAGE_SIZE);
       setCookie(PAGE_SIZE_COOKIE, PAGE_SIZE);
@@ -305,7 +303,6 @@ if (pageSizeSelect) {
       setCookie(PAGE_SIZE_COOKIE, n);
     }
 
-    // UX: changing page size should return you to page 1
     pageState.page = 1;
     await rerender();
   });
@@ -365,6 +362,9 @@ async function rerender() {
 
   const stats = await apiStats();
   renderStats(statsEls, stats);
+
+  // Show current page size on Stats view (UI preference)
+  if (statsEls.pageSizeEl) statsEls.pageSizeEl.textContent = String(pageState.pageSize);
 }
 
 async function onEdit(id) {
@@ -429,7 +429,6 @@ form.addEventListener("submit", async (e) => {
   const payload = readForm();
   const errors = validate(payload);
 
-  // Client-side image validation
   const file = imageFileEl?.files && imageFileEl.files[0] ? imageFileEl.files[0] : null;
   const imgErr = validateImageClientSide(file);
   if (imgErr) errors.image = imgErr;
@@ -438,7 +437,6 @@ form.addEventListener("submit", async (e) => {
   if (Object.keys(errors).length) return;
 
   try {
-    // Use multipart always (so optional image can be included)
     const fd = buildFormData(payload, { file, removeImage: removeImageFlag });
 
     if (payload.id) await apiUpdateLogForm(payload.id, fd);
@@ -520,7 +518,6 @@ function showErrors(errors) {
 // Image events
 if (imageFileEl) {
   imageFileEl.addEventListener("change", () => {
-    // picking a new file cancels any pending remove
     removeImageFlag = false;
 
     const file = imageFileEl.files && imageFileEl.files[0] ? imageFileEl.files[0] : null;
@@ -533,7 +530,6 @@ if (imageFileEl) {
       return;
     }
 
-    // Clear any previous image error
     const imgErrEl = document.querySelector('[data-err-for="image"]');
     if (imgErrEl) imgErrEl.textContent = "";
 
